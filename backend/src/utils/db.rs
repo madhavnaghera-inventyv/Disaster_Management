@@ -1,7 +1,8 @@
 use lazy_static::lazy_static;
 use mongodb::Client;
 use tokio::sync::Mutex;
-use std::sync::Arc;
+use std::{env, sync::Arc};
+use dotenv::dotenv;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -13,7 +14,11 @@ lazy_static! {
 }
 
 pub async fn initialize_db() -> AppState {
-    let client = Client::with_uri_str("mongodb+srv://smit:dankhra11@cluster0.vn4j6hi.mongodb.net/disaster")
+    
+    dotenv().ok();
+    let database_uri = env::var("DATABASE_URI").expect("DATABASE_URI must be set in .env");
+    
+    let client = Client::with_uri_str(&database_uri)
         .await
         .expect("Failed to connect to MongoDB!");
 
