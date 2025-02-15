@@ -2,6 +2,7 @@ mod utils;
 use utils::db::initialize_db; 
 mod routes;
 mod user;
+mod disaster;
 use routes::merge_routes;
 
 #[tokio::main]
