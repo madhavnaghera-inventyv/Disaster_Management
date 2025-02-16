@@ -3,7 +3,7 @@ use utils::db::initialize_db;
 mod routes;
 mod user;
 use routes::merge_routes;
-
+mod shelters;
 #[tokio::main]
 async fn main() {
     let state = initialize_db().await;
