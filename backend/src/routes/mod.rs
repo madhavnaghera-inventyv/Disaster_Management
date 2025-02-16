@@ -4,6 +4,6 @@ use crate::utils::db::AppState;
 
 pub fn merge_routes(state: AppState) -> Router {
     Router::new()
-        .nest("/user", user::create_routes(state.clone()))
+        .nest("/user", user::user_routes(state.clone()))
         .nest("/shelters", shelters::shelters_routes(state.clone())) 
 }

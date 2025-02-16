@@ -1,20 +1,26 @@
-use axum::{extract::State, http::StatusCode, Json};
-use validator::Validate;
-use crate::{user::user_structure::User, utils::db::AppState};
+use axum::{
+    extract::State, 
+    http::StatusCode, 
+    response::IntoResponse, 
+    Json
+};
+use crate::utils::db::AppState;
+use super::{user_model, user_structure::{LoginRequest, RegisterRequest}};
 
-use super::user_model::get_users;
 
-pub async fn add_user_service(
-    State(state): State<AppState>,
-    Json(user): Json<User>,
-) -> Result<Json<User>, (StatusCode, String)> {
-    if let Err(errors) = user.validate() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            format!("Validation error: {:?}", errors),
-        ));
+pub async fn login_service(
+    State(_state): State<AppState>, 
+    Json(payload): Json<LoginRequest>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    if payload.email.trim().is_empty() || payload.password.trim().is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "Email and password must not be empty".to_string()));
     }
+    user_model::login(State(_state), Json(payload)).await
+}
 
-    let users = get_users(axum::extract::State(state)).await;  // You may want to adjust `get_users` to return a result instead of just printing
-    Ok(Json(user))
+pub async fn register_service(State(_state): State<AppState>, Json(payload): Json<RegisterRequest>) -> Result<impl IntoResponse, (StatusCode, String)> {
+    if payload.email.trim().is_empty() || payload.password.trim().is_empty() || payload.name.trim().is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "Email and password must not be empty".to_string()));
+    }
+    user_model::register(State(_state), Json(payload)).await
 }
