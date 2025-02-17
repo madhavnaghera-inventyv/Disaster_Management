@@ -19,6 +19,7 @@ pub async fn create_resource_service(
     resource: Json<Resource>,
 ) -> Response<Body> {
     // Validate resource data
+     println!("Received resource: {:?}", resource);
     if resource.name.trim().is_empty()
         || resource.category.trim().is_empty()
         || resource.description.trim().is_empty()

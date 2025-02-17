@@ -20,4 +20,3 @@ pub fn resources_routes(state: AppState) -> Router {
         .with_state(state)
 }       
 
-

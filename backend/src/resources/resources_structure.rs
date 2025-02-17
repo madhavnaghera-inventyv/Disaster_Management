@@ -20,6 +20,7 @@ pub struct Location {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ResourceStatus {
     Available,
     Reserved

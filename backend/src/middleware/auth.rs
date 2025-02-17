@@ -2,7 +2,7 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
     middleware::Next,
-    response::Response,
+    response::{IntoResponse, Response},
 };
 use jsonwebtoken::{decode, DecodingKey, Validation};
 use mongodb::bson::doc;
@@ -17,9 +17,9 @@ pub struct Claims {
 }
 
 pub async fn auth_middleware<B>(
-    req: Request<B>,
-    next: Next,
-) -> Result<Response<Body>, StatusCode> {
+    mut req: Request<axum::body::Body>,
+    next: Next, 
+) -> Response {
     // Fetch the JWT secret (or use a default value if not set in the environment)
     let secret = env::var("JWT_SECRET").unwrap_or_else(|_| {
         println!("JWT_SECRET environment variable not found, using default value.");
@@ -38,7 +38,7 @@ pub async fn auth_middleware<B>(
     // If no token is found or if the format is incorrect, return an Unauthorized status
     if token.is_none() {
         println!("Authorization header missing or invalid format.");
-        return Err(StatusCode::UNAUTHORIZED);
+        return Err(StatusCode::UNAUTHORIZED).into_response();
     }
 
     // Unwrap the token (safe now because we checked it above)
@@ -60,7 +60,7 @@ pub async fn auth_middleware<B>(
                 Some(state) => state.clone(),
                 None => {
                     println!("Failed to retrieve AppState from request.");
-                    return Err(StatusCode::INTERNAL_SERVER_ERROR);
+                    return Err(StatusCode::INTERNAL_SERVER_ERROR).into_response();
                 }
             };
 
@@ -78,8 +78,11 @@ pub async fn auth_middleware<B>(
 
                         if db_token == token {
                             println!("Token validation successful.");
-                            let req = req.map(|_| Body::empty());
-                            return Ok(next.run(req).await);
+                            // let req = req.map(|_| Body::empty());
+                            // return Ok(next.run(req).await);
+                            next.run(req).await.into_response()
+                            
+                            
                         } else {
                             println!("Token mismatch! Stored: {}, Provided: {}", db_token, token);
                         }
@@ -105,3 +108,4 @@ pub async fn auth_middleware<B>(
     println!("Authentication failed.");
     Err(StatusCode::UNAUTHORIZED)
 }
+
