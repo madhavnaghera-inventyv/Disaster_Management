@@ -8,6 +8,7 @@ mod  middleware;
 mod user;
 use routes::merge_routes;
 mod shelters;
+mod middleware;
 #[tokio::main]
 async fn main() {
     let state = Arc::new(initialize_db().await);  
