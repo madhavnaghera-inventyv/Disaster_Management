@@ -64,7 +64,6 @@ pub async fn auth_middleware(
                             .await
                             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-                            // ✅ Fetch User ID from DB
                             let user_id = user_doc.get("_id")
                                 .and_then(Bson::as_object_id)
                                 .map(|oid| oid.to_string())
@@ -72,7 +71,6 @@ pub async fn auth_middleware(
 
                             let mut response = next.run(req).await;
                             
-                            // ✅ Modify Response Headers
                             let headers = response.headers_mut();
                             headers.insert(
                                 "Authorization",
