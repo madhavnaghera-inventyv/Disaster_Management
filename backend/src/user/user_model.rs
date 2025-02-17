@@ -14,7 +14,7 @@ use serde_json::json;
 
 const SECRET_KEY: &[u8] = b"disaster";
 
-// ✅ **Hash Password**
+
 fn hash_password(password: &str) -> Result<String, argon2::password_hash::Error> {
     let salt = SaltString::generate(&mut OsRng);
     let argon2 = Argon2::default();
@@ -24,7 +24,7 @@ fn hash_password(password: &str) -> Result<String, argon2::password_hash::Error>
     Ok(hashed_password)
 }
 
-// ✅ **Verify Password**
+
 fn verify_password(password: &str, hashed_password: &str) -> bool {
     let argon2 = Argon2::default();
     match PasswordHash::new(hashed_password) {
@@ -53,7 +53,7 @@ pub fn generate_jwt(email: &str) -> Result<String, jsonwebtoken::errors::Error> 
     )
 }
 
-// ✅ **Register User**
+
 pub async fn register(
     State(state): State<AppState>,
     Json(payload): Json<RegisterRequest>,
@@ -62,7 +62,7 @@ pub async fn register(
     let collection: Collection<mongodb::bson::Document> =
         db.database("disaster").collection("users");
 
-    // ❌ **Check if User Already Exists**
+    
     if collection
         .find_one(doc! { "email": &payload.email })
         .await
@@ -77,7 +77,7 @@ pub async fn register(
         return Err((StatusCode::BAD_REQUEST, "User already exists".to_string()));
     }
 
-    // ✅ **Hash Password**
+   
     let hashed_password = hash_password(&payload.password).map_err(|_| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -85,7 +85,6 @@ pub async fn register(
         )
     })?;
 
-    // ✅ **Insert User with Token set to `null`**
     let new_user = doc! {
         "email": &payload.email,
         "password": hashed_password,
@@ -103,7 +102,7 @@ pub async fn register(
     Ok(Json(json!({"message": "User registered successfully"})))
 }
 
-// ✅ **Login User**
+
 pub async fn login(
     State(state): State<AppState>,
     Json(payload): Json<LoginRequest>,
@@ -112,7 +111,7 @@ pub async fn login(
     let collection: Collection<mongodb::bson::Document> =
         db.database("disaster").collection("users");
 
-    // ❌ **Check if User Exists**
+    
     let user = collection
         .find_one(doc! { "email": &payload.email })
         .await
@@ -127,7 +126,6 @@ pub async fn login(
         Some(user_doc) => {
             let stored_password = user_doc.get_str("password").unwrap_or_default();
 
-            // ❌ **Incorrect Password**
             if !verify_password(&payload.password, stored_password) {
                 return Err((
                     StatusCode::UNAUTHORIZED,
@@ -135,7 +133,6 @@ pub async fn login(
                 ));
             }
 
-            // ✅ **Generate JWT Token**
             let token = generate_jwt(&payload.email).map_err(|_| {
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -143,7 +140,6 @@ pub async fn login(
                 )
             })?;
 
-            // ✅ **Update Token in Database**
             collection
                 .update_one(
                     doc! { "email": &payload.email },
@@ -158,7 +154,7 @@ pub async fn login(
                     )
                 })?;
 
-            // ✅ **Set Token in HTTP Headers & Cookies**
+            
             let mut headers = HeaderMap::new();
             headers.insert(
                 "Authorization",
