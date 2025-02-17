@@ -1,66 +1,63 @@
 use axum::{
     body::Body,
-    extract::{State, Request},
-    http::StatusCode,
+    http::{Request, StatusCode},
     middleware::Next,
     response::Response,
 };
 use jsonwebtoken::{decode, DecodingKey, Validation};
-use mongodb::bson::{doc, oid::ObjectId};
+use mongodb::bson::doc;
 use serde::{Deserialize, Serialize};
-use tower_cookies::Cookies;
-use std::{convert::Infallible, env, sync::Arc};
+use std::{env, sync::Arc};
 use crate::utils::db::AppState;
 
 #[derive(Serialize, Deserialize)]
 pub struct Claims {
-    pub user_id: String,
-    pub username: String,
-    pub exp: usize,
+    pub sub: String,  // User email
+    pub exp: usize,   // Expiry timestamp
 }
 
-pub async fn auth<B>(
-    State(state): State<Arc<AppState>>, // Use Arc to avoid locks
-    cookies: Cookies,
-    req: Request<Body>,
+pub async fn auth_middleware<B>(
+    req: Request<B>,
     next: Next,
-) -> Result<Response, Infallible> {
-    if let Some(cookie) = cookies.get("csrf_token") {
-        let csrf_token = cookie.value().to_string();
-        let secret = env::var("JWT_SECRET").unwrap_or_else(|_| "supersecret".to_string());
+) -> Result<Response<Body>, StatusCode> {
+    let secret = env::var("JWT_SECRET").unwrap_or_else(|_| "disaster".to_string());
 
-        if let Ok(token) = decode::<Claims>(
-            &csrf_token, 
-            &DecodingKey::from_secret(secret.as_ref()), 
-            &Validation::default()
+    // Extract token from Authorization header
+    let token = req.headers()
+        .get("Authorization")
+        .and_then(|hv| hv.to_str().ok())
+        .and_then(|s| s.strip_prefix("Bearer ").map(String::from));
+
+    if let Some(token) = token {
+        // Decode and validate the JWT token
+        if let Ok(token_data) = decode::<Claims>(
+            &token,
+            &DecodingKey::from_secret(secret.as_ref()),
+            &Validation::default(),
         ) {
-            let user_id = token.claims.user_id.clone();
-            let username = token.claims.username.clone();
+            let user_email = &token_data.claims.sub;
 
-            let db = state.db.clone();
-            let collection = db.lock().await.database("disaster").collection::<mongodb::bson::Document>("users");
+            // Get MongoDB state from request extensions
+            if let Some(state) = req.extensions().get::<Arc<AppState>>() {
+                let db = state.db.clone();
+                let collection = db.lock().await
+                    .database("disaster")
+                    .collection::<mongodb::bson::Document>("users");
 
-            // Ensure MongoDB `_id` handling works for both string and ObjectId
-            let filter = doc! {
-                "$or": [
-                    { "_id": ObjectId::parse_str(&user_id).ok() },
-                    { "id": &user_id }
-                ],
-                "username": &username
-            };
+                // Validate token against stored value in database
+                if let Ok(Some(user_doc)) = collection.find_one(doc! { "email": user_email }).await {
+                    if let Some(db_token) = user_doc.get_str("token").ok() {
+                        if db_token == token {
+                            // Token is valid, allow request to proceed
+                            let req = req.map(|_| Body::empty());
+                            return Ok(next.run(req).await);
 
-            if let Ok(Some(user_doc)) = collection.find_one(filter).await {
-                if let Some(db_token) = user_doc.get_str("token").ok() {
-                    if db_token == csrf_token {
-                        return Ok(next.run(req.map(Body::from)).await);
+                        }
                     }
                 }
             }
         }
     }
 
-    Ok(Response::builder()
-        .status(StatusCode::UNAUTHORIZED)
-        .body(Body::from("Unauthorized: Invalid or missing CSRF token"))
-        .unwrap())
+    Err(StatusCode::UNAUTHORIZED)
 }
