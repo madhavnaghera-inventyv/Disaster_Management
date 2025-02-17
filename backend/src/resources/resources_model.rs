@@ -103,6 +103,7 @@ pub async fn create_resource(
 pub async fn get_resources(
     state: State<AppState>
 ) -> impl IntoResponse {
+    println!("into model ");
     let db = state.db.lock().await;
     let collection: Collection<Resource> = db.database("disaster").collection("resources");
 
