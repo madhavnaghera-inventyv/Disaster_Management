@@ -6,13 +6,14 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use mongodb::bson::doc;
+use std::sync::Arc;
 use crate::utils::db::AppState;
 
 pub async fn ngo_middleware(
-    State(state): State<AppState>, 
-    req: Request<Body>, 
-    next: Next
-) -> Response {
+    State(state): State<Arc<AppState>>, // Use Arc<AppState> for thread safety
+    req: Request<Body>,
+    next: Next,   
+) -> Result<Response, StatusCode> {
     let headers = req.headers();
 
     // Extract user ID from the request headers
@@ -26,13 +27,13 @@ pub async fn ngo_middleware(
         let collection = db.database("disaster").collection::<mongodb::bson::Document>("user");
 
         if let Ok(Some(user_doc)) = collection.find_one(doc! { "id": user_id }).await {
-            if let Some(role) = user_doc.get_str("role").ok() {
+            if let Ok(role) = user_doc.get_str("role") {
                 if role == "ngo" {
-                    return next.run(req).await; 
+                    return Ok(next.run(req).await); 
                 }
             }
         }
     }
 
-    (StatusCode::UNAUTHORIZED, "Unauthorized: Only NGO role is allowed").into_response()
+    Ok((StatusCode::UNAUTHORIZED, "Unauthorized: Only NGO role is allowed").into_response())
 }

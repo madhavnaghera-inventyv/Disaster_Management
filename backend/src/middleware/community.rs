@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use axum::{
     extract::State,
     body::Body,
@@ -9,7 +11,7 @@ use mongodb::bson::doc;
 use crate::utils::db::AppState;
 
 pub async fn community_middleware(
-    State(state): State<AppState>, 
+    State(state): State<Arc<AppState>>, 
     req: Request<Body>, 
     next: Next
 ) -> Response {
