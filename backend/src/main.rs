@@ -6,6 +6,7 @@ mod routes;
 mod resources;
 mod  middleware;
 mod user;
+mod disaster;
 use routes::merge_routes;
 mod shelters;
 mod middleware;
