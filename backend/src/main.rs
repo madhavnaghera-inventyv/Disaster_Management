@@ -1,6 +1,7 @@
 mod utils;
 use utils::db::initialize_db; 
 mod routes;
+mod resources;
 mod  middleware;
 mod user;
 use routes::merge_routes;
