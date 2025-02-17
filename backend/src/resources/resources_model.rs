@@ -6,7 +6,7 @@ use super::resources_structure::Resource;
 
 /// Database operations for managing disaster relief resources
 /// 
-/// This module provides CRUD operations for resources in the MongoDB database.
+/// This module provides operations for resources in the MongoDB database.
 /// Each function handles database interactions and returns appropriate responses
 /// using the common response format.
 
