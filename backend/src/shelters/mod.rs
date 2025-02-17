@@ -17,7 +17,6 @@ pub fn shelters_routes(state: Arc<AppState>) -> Router {
         .route("/create_shelter", post(create_shelter_service))
         .route("/delete_shelter", delete(delete_shelter_service)) 
         .route("/update_shelter", patch(update_shelter_service)) 
-        .layer(from_fn(auth_middleware))
-        // .layer(from_fn(rotate_token_middleware))
-        .with_state((*state).clone())
+        .with_state(state.into())
+
 }
