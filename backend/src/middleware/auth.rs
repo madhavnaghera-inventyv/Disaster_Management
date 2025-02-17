@@ -1,9 +1,9 @@
 use std::{env, sync::Arc};
 
 use axum::{body::Body, extract::Request, http::HeaderValue, middleware::Next, response::Response};
-use hyper:: StatusCode;
+use hyper::StatusCode;
 use jsonwebtoken::{decode, DecodingKey, Validation};
-use mongodb::bson::doc;
+use mongodb::bson::{doc, Bson};
 
 use crate::{user::{user_model::generate_jwt, user_structure::Claims}, utils::db::AppState};
 
@@ -36,7 +36,6 @@ pub async fn auth_middleware(
     ) {
         Ok(token_data) => {
             let user_email = &token_data.claims.sub;
-
             let state = match req.extensions().get::<Arc<AppState>>() {
                 Some(state) => state.clone(),
                 None => return Err(StatusCode::INTERNAL_SERVER_ERROR),
@@ -57,12 +56,19 @@ pub async fn auth_middleware(
                             };
                             println!("New Token: {}", new_token);
 
+                            // Update token in DB
                             collection.update_one(
                                 doc! { "email": user_email },
                                 doc! { "$set": { "token": new_token.clone() } },
                             )
                             .await
                             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+                            // ✅ Fetch User ID from DB
+                            let user_id = user_doc.get("_id")
+                                .and_then(Bson::as_object_id)
+                                .map(|oid| oid.to_string())
+                                .unwrap_or_else(|| "unknown".to_string());
 
                             let mut response = next.run(req).await;
                             
@@ -72,7 +78,12 @@ pub async fn auth_middleware(
                                 "Authorization",
                                 HeaderValue::from_str(&format!("Bearer {}", new_token)).unwrap(),
                             );
+                            headers.insert(
+                                "X-User-Id",
+                                HeaderValue::from_str(&user_id).unwrap(),
+                            );
 
+                            // Set the token in a cookie
                             let cookie_value = format!(
                                 "token={}; HttpOnly; Path=/; Max-Age=86400; SameSite=Strict",
                                 new_token
