@@ -115,7 +115,7 @@ pub async fn login(
         })?;
 
     match user {
-        Some(user_doc) => {
+        Some(mut user_doc) => {
             let stored_password = user_doc.get_str("password").unwrap_or_default();
 
             if !verify_password(&payload.password, stored_password) {
@@ -133,6 +133,20 @@ pub async fn login(
                 )
             })?;
 
+            // Save the token in the database
+            user_doc.insert("token", token.clone()); // Insert the token field into the document
+            collection.update_one(
+                doc! { "email": &payload.email },
+                doc! { "$set": { "token": token.clone() } }, // Update the token field in the document
+            )
+            .await
+            .map_err(|_| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to save token to database".to_string(),
+                )
+            })?;
+
             let cookie_value = format!(
                 "token={}; HttpOnly; Path=/; Max-Age=86400; SameSite=Strict",
                 token
@@ -140,7 +154,7 @@ pub async fn login(
             let mut headers = HeaderMap::new();
             headers.insert(
                 "Authorization",
-                HeaderValue::from_str(&format!("{}", token)).unwrap(),
+                HeaderValue::from_str(&format!("Bearer {}", token)).unwrap(),
             );
             headers.insert("Set-Cookie", HeaderValue::from_str(&cookie_value).unwrap());
 

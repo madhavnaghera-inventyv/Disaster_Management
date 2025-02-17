@@ -12,114 +12,15 @@ use crate::utils::db::AppState;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Claims {
-    pub sub: String,  
-    pub exp: usize,   
+    pub sub: String,  // User's email (subject)
+    pub exp: usize,   // Expiration timestamp
 }
-
-// pub async fn auth_middleware<B>(
-
-//     req: Request<B>,
-//     next: Next,
-// ) -> Result<Response<Body>, StatusCode> {
-//     let secret = env::var("JWT_SECRET").unwrap_or_else(|_| {
-//         println!("JWT_SECRET environment variable not found, using default value.");
-//         "disaster".to_string()
-//     });
-//     println!("Authorization Header: {:?}", req.headers().get("Authorization"));
-
-
-//     // Extract token from Authorization header
-//     let token = match req.headers().get("Authorization") {
-//         Some(hv) => match hv.to_str() {
-//             Ok(header_value) => {
-//                 if header_value.starts_with("Bearer ") {
-//                     Some(header_value.trim_start_matches("Bearer ").to_string())
-//                 } else {
-//                     println!("Authorization header found but missing 'Bearer ' prefix: {}", header_value);
-//                     None
-//                 }
-//             }
-//             Err(_) => {
-//                 println!("Authorization header is not a valid string");
-//                 None
-//             }
-//         },
-//         None => {
-//             println!("No Authorization header found");
-//             None
-//         }
-//     };
-    
-
-//     if token.is_none() {
-//         println!("Authorization header missing or invalid format.");
-//         return Err(StatusCode::UNAUTHORIZED);
-//     }
-
-//     if let Some(token) = token {
-//         println!("Extracted Token: {}", token);
-
-//         // Decode and validate the JWT token
-//         match decode::<Claims>(
-//             &token,
-//             &DecodingKey::from_secret(secret.as_ref()),
-//             &Validation::default(),
-//         ) {
-//             Ok(token_data) => {
-//                 println!("Token Decoded Successfully: ", 
-//             );
-//                 let user_email = &token_data.claims.sub;
-//                 println!("Token Decoded Successfully: Email -> {}", user_email);
-
-//                 // Get MongoDB state from request extensions
-//                 if let Some(state) = req.extensions().get::<Arc<AppState>>() {
-//                     let db = state.db.clone();
-//                     let collection = db.lock().await
-//                         .database("disaster")
-//                         .collection::<mongodb::bson::Document>("users");
-
-//                     // Validate token against stored value in database
-//                     match collection.find_one(doc! { "email": user_email }).await {
-//                         Ok(Some(user_doc)) => {
-//                             println!("User found in database: {}", user_email);
-                            
-//                             if let Some(db_token) = user_doc.get_str("token").ok() {
-//                                 println!("Stored Token: {}", db_token);
-
-//                                 if db_token == token {
-//                                     println!("Token validation successful.");
-//                                     let req = req.map(|_| Body::empty());
-//                                     return Ok(next.run(req).await);
-//                                 } else {
-//                                     println!("Stored token does not match provided token.");
-//                                 }
-//                             } else {
-//                                 println!("No token found in the database for user.");
-//                             }
-//                         }
-//                         Ok(None) => println!("No user found with email: {}", user_email),
-//                         Err(e) => println!("Database query failed: {:?}", e),
-//                     }
-//                 } else {
-//                     println!("Failed to retrieve AppState from request.");
-//                 }
-//             }
-//             Err(e) => {
-//                 println!("JWT token decoding failed: {:?}", e);
-//             }
-//         }
-//     }
-
-//     println!("Authentication failed.");
-//     Err(StatusCode::UNAUTHORIZED)
-// }
-
-
 
 pub async fn auth_middleware<B>(
     req: Request<B>,
     next: Next,
 ) -> Result<Response<Body>, StatusCode> {
+    // Fetch the JWT secret (or use a default value if not set in the environment)
     let secret = env::var("JWT_SECRET").unwrap_or_else(|_| {
         println!("JWT_SECRET environment variable not found, using default value.");
         "disaster".to_string()
@@ -127,23 +28,24 @@ pub async fn auth_middleware<B>(
 
     println!("Authorization Header: {:?}", req.headers().get("Authorization"));
 
-    // Extract token from Authorization header
     let token = req
         .headers()
         .get("Authorization")
         .and_then(|hv| hv.to_str().ok())
-        .filter(|hv| hv.starts_with("Bearer "))
+        .filter(|hv| hv.starts_with("Bearer ")) // Ensure the token starts with "Bearer "
         .map(|hv| hv.trim_start_matches("Bearer ").to_string());
 
+    // If no token is found or if the format is incorrect, return an Unauthorized status
     if token.is_none() {
         println!("Authorization header missing or invalid format.");
         return Err(StatusCode::UNAUTHORIZED);
     }
 
+    // Unwrap the token (safe now because we checked it above)
     let token = token.unwrap();
     println!("Extracted Token: {}", token);
 
-    // Decode and validate the JWT token
+   
     match decode::<Claims>(
         &token,
         &DecodingKey::from_secret(secret.as_ref()),
@@ -153,7 +55,7 @@ pub async fn auth_middleware<B>(
             let user_email = &token_data.claims.sub;
             println!("Token Decoded Successfully: Email -> {}", user_email);
 
-            // ✅ Implicitly retrieve AppState from request
+            // Retrieve AppState from request extensions (needed to access the database)
             let state = match req.extensions().get::<Arc<AppState>>() {
                 Some(state) => state.clone(),
                 None => {
@@ -167,34 +69,39 @@ pub async fn auth_middleware<B>(
                 .database("disaster")
                 .collection::<mongodb::bson::Document>("users");
 
-            // Validate token against stored value in database
+            // Validate token against stored value in the database
             match collection.find_one(doc! { "email": user_email }).await {
                 Ok(Some(user_doc)) => {
-                    println!("User found in database: {}", user_email);
-                    
+                    println!("{}",user_doc);
                     if let Some(db_token) = user_doc.get_str("token").ok() {
-                        println!("Stored Token: {}", db_token);
+                        println!("Token found in DB: {}", db_token); // Debugging line
 
                         if db_token == token {
                             println!("Token validation successful.");
                             let req = req.map(|_| Body::empty());
                             return Ok(next.run(req).await);
                         } else {
-                            println!("Stored token does not match provided token.");
+                            println!("Token mismatch! Stored: {}, Provided: {}", db_token, token);
                         }
                     } else {
-                        println!("No token found in the database for user.");
+                        println!("User exists but no token found in the database.");
                     }
                 }
-                Ok(None) => println!("No user found with email: {}", user_email),
-                Err(e) => println!("Database query failed: {:?}", e),
+                Ok(None) => {
+                    println!("User not found in the database.");
+                }
+                Err(e) => {
+                    println!("Database query failed: {:?}", e);
+                }
             }
         }
         Err(e) => {
+            // If JWT decoding fails, log the error
             println!("JWT token decoding failed: {:?}", e);
         }
     }
 
+    // If token is invalid or missing, return Unauthorized status
     println!("Authentication failed.");
     Err(StatusCode::UNAUTHORIZED)
 }

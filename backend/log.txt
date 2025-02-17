@@ -55,3 +55,17 @@
 [2025-02-17T10:44:16.062168800+05:30] GET /resources/get_resources
 [2025-02-17T10:44:16.214059800+05:30] GET /resources/get_resources
 [2025-02-17T10:44:16.357736300+05:30] GET /resources/get_resources
+[2025-02-17T10:54:09.657739600+05:30] POST /user/login
+[2025-02-17T10:54:35.384902200+05:30] GET /shelters/get_shelters
+[2025-02-17T10:56:14.928343900+05:30] POST /user/login
+[2025-02-17T10:56:25.091396400+05:30] GET /shelters/get_shelters
+[2025-02-17T10:58:39.985765400+05:30] POST /user/login
+[2025-02-17T10:58:49.606513200+05:30] GET /shelters/get_shelters
+[2025-02-17T11:01:37.934573500+05:30] POST /user/login
+[2025-02-17T11:01:47.104103200+05:30] GET /shelters/get_shelters
+[2025-02-17T11:04:52.141405700+05:30] GET /shelters/get_shelters
+[2025-02-17T11:08:51.222151700+05:30] POST /user/login
+[2025-02-17T11:09:02.634508100+05:30] GET /shelters/get_shelters
+[2025-02-17T11:11:55.976422900+05:30] POST /user/login
+[2025-02-17T11:12:27.010778400+05:30] GET /shelters/get_shelters
+[2025-02-17T11:13:40.253539600+05:30] GET /resources/get_resources
