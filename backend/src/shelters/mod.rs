@@ -12,5 +12,5 @@ pub fn shelters_routes(state: AppState) -> Router {
         .route("/create_shelter", post(create_shelter_service))
         .route("/delete_shelter", delete(delete_shelter_service)) 
         .route("/update_shelter", patch(update_shelter_service)) 
-        .with_state(state)
+        .with_state(state.into())
 }
