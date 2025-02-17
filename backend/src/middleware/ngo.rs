@@ -10,7 +10,7 @@ use std::sync::Arc;
 use crate::utils::db::AppState;
 
 pub async fn ngo_middleware(
-    State(state): State<Arc<AppState>>, // Use Arc<AppState> for thread safety
+    State(state): State<Arc<AppState>>, 
     req: Request<Body>,
     next: Next,   
 ) -> Result<Response, StatusCode> {

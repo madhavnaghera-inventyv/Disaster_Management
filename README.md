@@ -73,3 +73,15 @@ Key functionalities include **real-time alerts, preparedness guide sharing, emer
 
 ---
 This project provides interns with **hands-on experience** in Rust-based backend development and Angular frontend engineering while contributing to a socially impactful disaster preparedness initiative.
+
+
+## Contributors
+- **Lakshya** - Shelter Module
+- **Raj** - User Module
+- **Madhav** - Middleware Module
+- **Krunal** - Live API Module
+- **Mitanshu** - Disaster Module
+- **Smit** - Resources Module
+- **Jay P** - web socket (pending)
+
+
