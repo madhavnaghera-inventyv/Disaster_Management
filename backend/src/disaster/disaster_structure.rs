@@ -24,21 +24,24 @@ pub struct DisasterRecord {
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct DisasterGuide {
-    #[serde(rename = "_id")]
+    #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
     pub id: Option<ObjectId>,
 
     #[serde(rename = "disaster_id")]
     pub disaster_id: ObjectId, // Reference to a DisasterRecord
 
     #[validate(length(min = 1, message = "At least one 'do' should be provided"))]
-    pub dos: Vec<GuideItem>,
+    pub do_s: Vec<GuideItem>,
 
     #[validate(length(min = 1, message = "At least one 'don't' should be provided"))]
-    pub donts: Vec<GuideItem>,
+    pub dont_s: Vec<GuideItem>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct GuideItem {
+    #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
+    pub id: Option<ObjectId>,
+    
     pub user_id: ObjectId, // User who added this guide entry
 
     #[validate(length(min = 2, message = "Status must be at least 2 characters long"))]
@@ -46,4 +49,10 @@ pub struct GuideItem {
 
     #[validate(length(min = 5, message = "Message must be at least 5 characters long"))]
     pub message: String, // The actual guidance message
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct CombinedData {
+    pub disaster_guide: Vec<DisasterGuide>,
+    pub disaster_record: Vec<DisasterRecord>,
 }
