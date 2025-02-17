@@ -42,6 +42,7 @@ pub async fn create_resource_service(
 }
 
 pub async fn get_resources_service(state: State<AppState>) -> Response<Body> {
+    println!("hello world");
     get_resources(state).await.into_response()
 }
 

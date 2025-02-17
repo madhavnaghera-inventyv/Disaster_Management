@@ -1,14 +1,14 @@
 use axum::{
-    body::Body,
+    body::{Body, Bytes},
     http::{Request, StatusCode},
     middleware::Next,
-    response::Response,
+    response::{Response, IntoResponse},
 };
 use jsonwebtoken::{decode, DecodingKey, Validation};
-use mongodb::bson::doc;
+use mongodb::{bson::doc, Client};
 use serde::{Deserialize, Serialize};
 use std::{env, sync::Arc};
-use crate::utils::db::AppState;
+use crate::utils::db::AppState; // Your custom AppState containing database connection
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Claims {
@@ -16,16 +16,16 @@ pub struct Claims {
     pub exp: usize,   // Expiration timestamp
 }
 
-pub async fn auth_middleware<B>(
-    req: Request<B>,
-    next: Next,
+pub async fn auth_middleware(
+    req: Request<Body>,  // Accept any type of request body
+    next: Next,   
 ) -> Result<Response<Body>, StatusCode> {
-    // Fetch the JWT secret (or use a default value if not set in the environment)
     let secret = env::var("JWT_SECRET").unwrap_or_else(|_| {
         println!("JWT_SECRET environment variable not found, using default value.");
         "disaster".to_string()
     });
 
+    // Extract the Authorization header
     println!("Authorization Header: {:?}", req.headers().get("Authorization"));
 
     let token = req
@@ -35,17 +35,20 @@ pub async fn auth_middleware<B>(
         .filter(|hv| hv.starts_with("Bearer ")) // Ensure the token starts with "Bearer "
         .map(|hv| hv.trim_start_matches("Bearer ").to_string());
 
-    // If no token is found or if the format is incorrect, return an Unauthorized status
+    // If no token is found or the format is incorrect, return an Unauthorized status
     if token.is_none() {
         println!("Authorization header missing or invalid format.");
-        return Err(StatusCode::UNAUTHORIZED);
+        return Ok(Response::builder()
+            .status(StatusCode::UNAUTHORIZED)
+            .body(Body::from("Unauthorized: Invalid or missing CSRF token"))
+            .unwrap());
     }
 
-    // Unwrap the token (safe now because we checked it above)
+    // Extracted token (safe now as we checked it earlier)
     let token = token.unwrap();
     println!("Extracted Token: {}", token);
 
-   
+    // Decode the JWT token to validate it
     match decode::<Claims>(
         &token,
         &DecodingKey::from_secret(secret.as_ref()),
@@ -55,7 +58,7 @@ pub async fn auth_middleware<B>(
             let user_email = &token_data.claims.sub;
             println!("Token Decoded Successfully: Email -> {}", user_email);
 
-            // Retrieve AppState from request extensions (needed to access the database)
+            // Retrieve AppState (which contains the database connection) from the request extensions
             let state = match req.extensions().get::<Arc<AppState>>() {
                 Some(state) => state.clone(),
                 None => {
@@ -64,22 +67,20 @@ pub async fn auth_middleware<B>(
                 }
             };
 
-            let db = state.db.clone();
+            let db = state.db.clone(); // Clone the database handle
             let collection = db.lock().await
                 .database("disaster")
                 .collection::<mongodb::bson::Document>("users");
 
-            // Validate token against stored value in the database
+            // Validate token against the one stored in the database
             match collection.find_one(doc! { "email": user_email }).await {
                 Ok(Some(user_doc)) => {
-                    println!("{}",user_doc);
                     if let Some(db_token) = user_doc.get_str("token").ok() {
                         println!("Token found in DB: {}", db_token); // Debugging line
 
                         if db_token == token {
                             println!("Token validation successful.");
-                            let req = req.map(|_| Body::empty());
-                            return Ok(next.run(req).await);
+                            return Ok(next.run(req).await); // Proceed to the next middleware/handler
                         } else {
                             println!("Token mismatch! Stored: {}, Provided: {}", db_token, token);
                         }
@@ -101,7 +102,10 @@ pub async fn auth_middleware<B>(
         }
     }
 
-    // If token is invalid or missing, return Unauthorized status
+    // If the token is invalid, missing, or decoding fails, return Unauthorized status
     println!("Authentication failed.");
-    Err(StatusCode::UNAUTHORIZED)
+    Ok(Response::builder()
+        .status(StatusCode::UNAUTHORIZED)
+        .body(Body::from("Unauthorized: Invalid or missing CSRF token"))
+        .unwrap())
 }

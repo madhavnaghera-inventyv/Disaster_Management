@@ -7,7 +7,8 @@ use crate::utils::db::AppState;
 pub mod shelters_model;
 pub mod shelters_service;
 pub mod shelters_structure;
-use crate::middleware::auth::auth_middleware;
+use crate::middleware::{auth::auth_middleware,rotate_token::rotate_token_middleware};
+
 
 
 pub fn shelters_routes(state: Arc<AppState>) -> Router {
@@ -17,5 +18,6 @@ pub fn shelters_routes(state: Arc<AppState>) -> Router {
         .route("/delete_shelter", delete(delete_shelter_service)) 
         .route("/update_shelter", patch(update_shelter_service)) 
         .layer(from_fn(auth_middleware))
+        // .layer(from_fn(rotate_token_middleware))
         .with_state((*state).clone())
 }
