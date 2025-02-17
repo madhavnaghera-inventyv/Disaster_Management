@@ -1,7 +1,7 @@
 use axum::{extract::{Path, State}, http::StatusCode, response::IntoResponse, Json};
 use futures::{StreamExt, TryStreamExt};
 use serde_json::json;
-use crate::{disaster::disaster_structure::{DisasterGuide, DisasterRecord, GuideItem, CombinedData}, utils::{db::AppState, response::{error_response, success_response}}};
+use crate::{disaster::disaster_structure::{DisasterGuide, DisasterRecord, GuideItem}, utils::{db::AppState, response::{error_response, success_response}}};
 use mongodb::{
     bson::{doc, from_document, oid::ObjectId, to_bson, Bson}, options::{ClientOptions, FindOptions, IndexOptions}, Client, Collection, IndexModel
 };

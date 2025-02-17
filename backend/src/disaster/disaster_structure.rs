@@ -51,8 +51,3 @@ pub struct GuideItem {
     pub message: String, // The actual guidance message
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct CombinedData {
-    pub disaster_guide: Vec<DisasterGuide>,
-    pub disaster_record: Vec<DisasterRecord>,
-}
