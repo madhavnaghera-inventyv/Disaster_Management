@@ -1,61 +1,79 @@
 use axum::{
-    extract::State,
     body::Body,
     http::{Request, StatusCode, HeaderValue},
     middleware::Next,
-    response::{IntoResponse, Response},
+    response::Response,
 };
-use mongodb::bson::{doc, Document};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use chrono::{Utc, Duration};
-use std::{sync::Arc, env};
+use mongodb::bson::{doc, Document};
+use serde::{Deserialize, Serialize};
+use std::{env, sync::Arc};
+use tower_cookies::{cookie::{time, Cookie, SameSite}, Cookies};
 use crate::utils::db::AppState;
-use crate::middleware::auth::Claims;
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Claims {
+    pub sub: String, // Email
+    pub exp: usize,
+}
+
+// Middleware function to rotate the token
 pub async fn rotate_token_middleware(
-    State(state): State<Arc<AppState>>, // Use Arc to prevent locking
-    mut req: Request<Body>,
+    req: Request<Body>,
     next: Next,
-) -> Response {
-    let headers = req.headers();
+) -> Result<Response<Body>, StatusCode> {
+    let state = req.extensions().get::<Arc<AppState>>().cloned().unwrap();
+    
+    let secret = env::var("JWT_SECRET").unwrap_or_else(|_| "disaster".to_string());
 
-    // Extract token from Authorization header
-    let token_str = headers.get("Authorization")
-        .and_then(|val| val.to_str().ok())
-        .and_then(|val| val.strip_prefix("Bearer "))
-        .unwrap_or("");
+    // Get the token from the Authorization header or cookies
+    let token_str = req.headers()
+        .get("Authorization")
+        .and_then(|hv| hv.to_str().ok())
+        .map(|s| s.trim_start_matches("Bearer ").to_string())
+        .or_else(|| {
+            // Safely access cookies
+            req.extensions()
+                .get::<Cookies>()
+                .and_then(|cookies| cookies.get("token").map(|c| c.value().to_string()))
+        });
 
-    if !token_str.is_empty() {
-        let secret = env::var("JWT_SECRET").unwrap_or_else(|_| "supersecret".to_string());
-
-        // Decode existing token
-        if let Ok(token) = decode::<Claims>(
-            token_str,
+    // If a token exists, decode and verify it
+    if let Some(token_str) = token_str {
+        println!("Token found: {}", token_str); // Debug print
+        
+        if let Ok(token_data) = decode::<Claims>(
+            &token_str,
             &DecodingKey::from_secret(secret.as_ref()),
             &Validation::default(),
         ) {
-            let user_id = token.claims.user_id.clone();
-            let username = token.claims.username.clone();
-            let token_exp = token.claims.exp;
+            let email = token_data.claims.sub.clone();
+            let token_exp = token_data.claims.exp;
+            println!("Token Decoded: {:?}", token_data); // Debug print
 
-            // Prevent unnecessary token rotation
+            // Check if the token is expired
             if token_exp > Utc::now().timestamp() as usize {
-                return next.run(req).await;
+                println!("Token is valid, continuing with the request.");
+                // Token is still valid, proceed with the request
+                return Ok(next.run(req).await);
             }
 
-            // Access MongoDB without blocking
+            // Token expired, proceed to rotate the token
+            println!("Token expired, rotating the token...");
+
             let db = state.db.clone();
             let collection = db.lock().await.database("disaster").collection::<Document>("users");
 
-            // Validate token against database
-            if let Ok(Some(user_doc)) = collection.find_one(doc! { "id": &user_id }).await {
+            // Fetch the user from the database
+            if let Ok(Some(user_doc)) = collection.find_one(doc! { "email": &email }).await {
                 if let Some(db_token) = user_doc.get_str("token").ok() {
+                    // Compare the tokens
                     if db_token == token_str {
-                        // Generate a new token with extended expiry
+                        // Generate a new token
                         let new_exp = Utc::now() + Duration::hours(1);
                         let new_claims = Claims {
-                            user_id: user_id.clone(),
-                            username: username.clone(),
+                            sub: email.clone(),
                             exp: new_exp.timestamp() as usize,
                         };
 
@@ -65,23 +83,53 @@ pub async fn rotate_token_middleware(
                             &EncodingKey::from_secret(secret.as_ref()),
                         ).expect("Failed to encode new JWT");
 
-                        // Update the token in the database
-                        if collection.update_one(
-                            doc! { "id": &user_id },
-                            doc! { "$set": { "token": &new_token } }
-                        ).await.is_ok() {
-                            let mut response = next.run(req).await;
-                            response.headers_mut().insert(
-                                "Authorization",
-                                HeaderValue::from_str(&format!("Bearer {}", new_token)).unwrap(),
-                            );
-                            return response;
+                        // Print the new rotated token
+                        println!("New Rotated Token: {}", new_token);
+
+                        // Update the token in the database with the new one
+                        let update_result = collection.update_one(
+                            doc! { "email": &email },
+                            doc! { "$set": { "token": &new_token } },
+                        ).await;
+
+                        if update_result.is_ok() {
+                            // Safely access cookies
+                            if let Some(mut cookies) = req.extensions().get::<Cookies>().cloned() {
+                                let mut response = next.run(req).await;
+
+                                // Update the Authorization header with the new token
+                                response.headers_mut().insert(
+                                    "Authorization",
+                                    HeaderValue::from_str(&format!("Bearer {}", new_token)).unwrap(),
+                                );
+
+                                // Set new cookie with the updated token
+                                let mut new_cookie = Cookie::new("token", new_token.clone());
+                                new_cookie.set_path("/");
+                                new_cookie.set_http_only(true);
+                                new_cookie.set_same_site(SameSite::Strict);
+                                new_cookie.set_max_age(time::Duration::hours(1));
+
+                                cookies.add(new_cookie);
+
+                                // Return the response with the updated token
+                                return Ok(response);
+                            }
+                        } else {
+                            println!("Failed to update the token in the database.");
                         }
+                    } else {
+                        println!("Token mismatch! Stored token does not match provided token.");
                     }
                 }
             }
+        } else {
+            println!("Failed to decode token.");
         }
+    } else {
+        println!("No token found in request.");
     }
 
-    (StatusCode::UNAUTHORIZED, "Unauthorized: Invalid or expired token").into_response()
+    // Unauthorized if token is invalid or expired
+    Err(StatusCode::UNAUTHORIZED)
 }
