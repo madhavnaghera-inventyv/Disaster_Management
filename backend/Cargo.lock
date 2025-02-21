@@ -314,6 +314,7 @@ dependencies = [
  "chrono",
  "dotenv",
  "futures",
+ "http",
  "hyper",
  "jsonwebtoken",
  "lazy_static",
@@ -3608,11 +3609,9 @@ dependencies = [
  "bitflags 2.8.0",
  "bytes",
  "http",
- "http-body",
  "pin-project-lite",
  "tower-layer",
  "tower-service",
- "tracing",
 ]
 
 [[package]]
