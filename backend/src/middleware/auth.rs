@@ -47,22 +47,26 @@ pub async fn auth_middleware(
                 .collection::<mongodb::bson::Document>("users");
 
             match collection.find_one(doc! { "email": user_email }).await {
+                
                 Ok(Some(user_doc)) => {
                     if let Some(db_token) = user_doc.get_str("token").ok() {
                         if db_token == token {
-                            let new_token = match generate_jwt(user_email) {
-                                Ok(new_token) => new_token,
-                                Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
-                            };
-                            println!("New Token: {}", new_token);
+                            // let new_token = match generate_jwt(user_email) {
+                            //     Ok(new_token) => new_token,
+                            //     Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+                            // };
 
+
+                            // println!("New Token: {}", new_token);
+                            
+                           
                             // Update token in DB
-                            collection.update_one(
-                                doc! { "email": user_email },
-                                doc! { "$set": { "token": new_token.clone() } },
-                            )
-                            .await
-                            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                            // collection.update_one(
+                                // doc! { "email": user_email },
+                                // doc! { "$set": { "token": new_token.clone() } },
+                            // )
+                            // .await
+                            // .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
                             let user_id = user_doc.get("_id")
                                 .and_then(Bson::as_object_id)
@@ -72,21 +76,22 @@ pub async fn auth_middleware(
                             let mut response = next.run(req).await;
                             
                             let headers = response.headers_mut();
-                            headers.insert(
-                                "Authorization",
-                                HeaderValue::from_str(&format!("Bearer {}", new_token)).unwrap(),
-                            );
+                            
+                            // headers.insert(
+                            //     "Authorization",
+                            //     HeaderValue::from_str(&format!("Bearer {}", new_token)).unwrap(),
+                            // );
                             headers.insert(
                                 "X-User-Id",
                                 HeaderValue::from_str(&user_id).unwrap(),
                             );
 
-                            // Set the token in a cookie
-                            let cookie_value = format!(
-                                "token={}; HttpOnly; Path=/; Max-Age=86400; SameSite=Strict",
-                                new_token
-                            );
-                            headers.insert("Set-Cookie", HeaderValue::from_str(&cookie_value).unwrap());
+                            // // Set the token in a cookie
+                            // let cookie_value = format!(
+                            //     "token={}; HttpOnly; Path=/; Max-Age=86400; SameSite=Strict",
+                            //     new_token
+                            // );
+                            // headers.insert("Set-Cookie", HeaderValue::from_str(&cookie_value).unwrap());
 
                             return Ok(response);
                         }
