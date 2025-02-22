@@ -16,11 +16,11 @@ pub mod shelters_structure;
 
 pub fn shelters_routes(state: Arc<AppState>) -> Router {
     Router::new()
-        .route("/get_shelters", get(get_shelter_service)) 
-        .route("/create_shelter", post(create_shelter_service))
-        .route("/delete_shelter", delete(delete_shelter_service)) 
-        .route("/update_shelter", patch(update_shelter_service))
-        .layer(from_fn_with_state(state.clone(), ngo_middleware))
-        .layer(from_fn(auth_middleware)) 
-        .with_state(state)
+    .route("/get_shelters", get(get_shelter_service)) 
+    .route("/create_shelter", post(create_shelter_service))
+    .route("/delete_shelter", delete(delete_shelter_service)) 
+    .route("/update_shelter", patch(update_shelter_service))
+    .layer(from_fn_with_state(state.clone(), ngo_middleware))
+    .layer(from_fn(auth_middleware)).with_state(state)
+
 }

@@ -34,12 +34,11 @@ pub async fn create_shelters(
 pub async fn get_shelters(State(state): State<Arc<AppState>>) -> Response {
     let db = state.db.lock().await;
     let collection: Collection<Shelter> = db.database("disaster").collection("shelters");
-
     match collection.find(doc! {}).await {
         Ok(cursor) => {
             let shelters: Vec<Shelter> = cursor.try_collect().await.unwrap_or_else(|_| vec![]);
             success_response("Shelters retrieved successfully", shelters, StatusCode::OK)
-        }
+        }   
         Err(e) => error_response(&format!("Error fetching shelters: {}", e), StatusCode::INTERNAL_SERVER_ERROR),
     }
 }

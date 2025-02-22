@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use axum::{
     extract::State,
     body::Body,
@@ -7,33 +5,38 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use mongodb::bson::doc;
+use mongodb::bson::{doc, oid::ObjectId};
+use std::sync::Arc;
 use crate::utils::db::AppState;
 
 pub async fn community_middleware(
     State(state): State<Arc<AppState>>, 
-    req: Request<Body>, 
-    next: Next
-) -> Response {
-    let headers = req.headers();
+    req: Request<Body>,
+    next: Next,  
+) -> Result<Response, StatusCode> {
 
-    let user_id = match headers.get("id") {
-        Some(id) => id.to_str().ok(),
-        None => None,
-    };
+    let user_id = req.extensions().get::<String>();
 
+    if user_id.is_none() {
+        println!("Id not found!");
+    }
+    let mut isCommunity = false;
     if let Some(user_id) = user_id {
+        
         let db = state.db.lock().await;
-        let collection = db.database("disaster").collection::<mongodb::bson::Document>("user");
+        let collection = db.database("disaster").collection::<mongodb::bson::Document>("users");
 
-        if let Ok(Some(user_doc)) = collection.find_one(doc! { "id": user_id }).await {
-            if let Some(role) = user_doc.get_str("role").ok() {
+        if let Ok(Some(user_doc)) = collection.find_one(doc!{ "_id": ObjectId::parse_str(user_id).unwrap() }).await {
+            if let Ok(role) = user_doc.get_str("role") {
                 if role == "community" {
-                    return next.run(req).await; 
+                    isCommunity = true;
                 }
             }
         }
     }
-
-    (StatusCode::UNAUTHORIZED, "Unauthorized: Only community role is allowed").into_response()
+    if isCommunity == true{
+        return Ok(next.run(req).await); 
+    }
+    Ok((StatusCode::UNAUTHORIZED, "Unauthorized: Only Community role is allowed").into_response())
 }
+

@@ -5,6 +5,7 @@ use hyper::StatusCode;
 use jsonwebtoken::{decode, DecodingKey, Validation};
 use mongodb::bson::{doc, Bson};
 
+
 use crate::{user::{user_model::generate_jwt, user_structure::Claims}, utils::db::AppState};
 
 pub async fn auth_middleware(
@@ -72,19 +73,17 @@ pub async fn auth_middleware(
                                 .and_then(Bson::as_object_id)
                                 .map(|oid| oid.to_string())
                                 .unwrap_or_else(|| "unknown".to_string());
+                                
+                                req.extensions_mut().insert(user_id.clone());
 
-                            let mut response = next.run(req).await;
-                            
-                            let headers = response.headers_mut();
+                                let response = next.run(req).await; // Pass the modified request forward
+                                
+                               
                             
                             // headers.insert(
                             //     "Authorization",
                             //     HeaderValue::from_str(&format!("Bearer {}", new_token)).unwrap(),
                             // );
-                            headers.insert(
-                                "X-User-Id",
-                                HeaderValue::from_str(&user_id).unwrap(),
-                            );
 
                             // // Set the token in a cookie
                             // let cookie_value = format!(
