@@ -1,8 +1,5 @@
 use axum::{
-    extract::{Path, State}, 
-    http::StatusCode, 
-    response::{IntoResponse, Response}, 
-    Json
+    body::Body, extract::{Path, Request, State}, http::StatusCode, response::{IntoResponse, Response}, Extension, Json, RequestPartsExt
 };
 use mongodb::bson::oid::ObjectId;
 use serde_json::json;
@@ -27,6 +24,7 @@ pub async fn add_dos_service(
     Path(dr_id): Path<ObjectId>,
     Json(payload): Json<serde_json::Value>,
 ) -> Response {
+    // println!("User ID: {}", user_id);
     // Validate input
     if payload.get("message").and_then(|m| m.as_str()).is_none() {
         return error_response("Message field is required", StatusCode::BAD_REQUEST);

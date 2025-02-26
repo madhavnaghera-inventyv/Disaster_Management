@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use axum::{extract::{Path, State}, http::StatusCode, response::IntoResponse, Json};
 use futures::{StreamExt, TryStreamExt};
 use serde_json::json;
@@ -664,122 +666,65 @@ pub async fn update_donts(
 }
 
 
-// pub async fn update_guide_item(
-//     State(state): State<AppState>,
-//     Path((dr_id, item_id)): Path<(ObjectId, ObjectId)>,
-//     Json(payload): Json<serde_json::Value>,
-// ) -> impl IntoResponse {
-//     let db = state.db.lock().await;
-//     let dg_collection: Collection<DisasterGuide> = db.database("disaster").collection("disaster_guide");
+pub async fn get_pending_guidelines(
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let db = state.db.lock().await;
 
-//     // Extract the status directly since it's already validated in the service
-//     let status = match payload.get("status").and_then(|s| s.as_str()) {
-//         Some(s) => s,
-//         None => return error_response("No status provided", StatusCode::BAD_REQUEST),
-//     };
-
-//     println!("Updating guide item for disaster_id: {:?}, item_id: {:?} with status {:?}", 
-//              dr_id, item_id, status);
-
-//     // First, find which array contains the item (do_s or dont_s)
-//     let find_query = doc! {
-//         "disaster_id": &dr_id,
-//         "$or": [
-//             { "do_s._id": &item_id },
-//             { "dont_s._id": &item_id }
-//         ]
-//     };
-
-//     let find_result = dg_collection.find_one(find_query).await;
+    // Step 1: Fetch disaster guides with pending items
+    let pending_query = doc! {
+        "$or": [
+            { "do_s.status": "Pending" },
+            { "dont_s.status": "Pending" }
+        ]
+    };
     
-//     let document = match find_result {
-//         Ok(Some(doc)) => doc,
-//         Ok(None) => return error_response("No matching disaster guide found", StatusCode::NOT_FOUND),
-//         Err(e) => return error_response(&format!("Database error: {}", e), StatusCode::INTERNAL_SERVER_ERROR),
-//     };
+    let dg_collection: Collection<DisasterGuide> = db.database("disaster").collection("disaster_guide");
+    let pending_guides_cursor = match dg_collection.find(pending_query).await {
+        Ok(cursor) => cursor,
+        Err(e) => return error_response("Some error occured", StatusCode::INTERNAL_SERVER_ERROR),
+    };
 
-//     // Determine if the item is in do_s or dont_s array
-//     let item_type = if document.do_s.iter().any(|item| item.id == item_id) {
-//         "do_s"
-//     } else if document.dont_s.iter().any(|item| item.id == item_id) {
-//         "dont_s"
-//     } else {
-//         return error_response("Item not found in either do_s or dont_s arrays", StatusCode::NOT_FOUND);
-//     };
+    let pending_guides: Vec<DisasterGuide> = match pending_guides_cursor.try_collect().await {
+        Ok(guides) => guides,
+        Err(e) => return error_response("Error collecting guides", StatusCode::INTERNAL_SERVER_ERROR),
+    };
 
-//     // Now that we know which array the item belongs to, proceed with the update
-//     let update_result = match status {
-//         "Accepted" => {
-//             dg_collection
-//                 .update_one(
-//                     doc! { "disaster_id": &dr_id, format!("{}._id", item_type): &item_id },
-//                     doc! { "$set": { format!("{}.$.status", item_type): "Accepted" } }
-//                 )
-//                 .await
-//         }
-//         "Rejected" => {
-//             dg_collection
-//                 .update_one(
-//                     doc! { "disaster_id": &dr_id },
-//                     doc! { "$pull": { item_type: { "_id": &item_id } } }  // Remove matching element
-//                 )
-//                 .await
-//         }
-//         _ => {
-//             return error_response("Invalid status provided", StatusCode::BAD_REQUEST);
-//         }
-//     };
+    // Step 2: For each guide, fetch the corresponding disaster record
+    let mut result = Vec::new();
+    let dr_collection: Collection<DisasterRecord> = db.database("disaster").collection("disaster_record");
 
-//     match update_result {
-//         Ok(res) => {
-//             if res.matched_count == 0 {
-//                 return error_response("No matching record found", StatusCode::NOT_FOUND);
-//             }
+    for mut guide in pending_guides {
+        // Fetch the disaster record
+        let disaster_id = guide.disaster_id.clone();
+        let disaster_filter = doc! { "_id": disaster_id };
+        
+        if let Ok(disaster_option) = dr_collection.find_one(disaster_filter).await {
+            if let Some(disaster) = disaster_option {
+                // Filter the guide to keep only pending items
+                guide.do_s = guide.do_s.into_iter()
+                    .filter(|item| item.status == "Pending")
+                    .collect();
+                
+                guide.dont_s = guide.dont_s.into_iter()
+                    .filter(|item| item.status == "Pending")
+                    .collect();
+                
+                // Create a combined result with both guide and disaster information
+                result.push(json!({
+                    "guide": guide,
+                    "disaster_name": disaster.name,
+                    "disaster_effects": disaster.effects,
+                    "disaster_short_description": disaster.short_description,
+                    "disaster_youtube_link": disaster.youtube_link
+                }));
+            }
+        }
+    }
 
-//             if status == "Rejected" {
-//                 return success_response(
-//                     "Item removed successfully",
-//                     json!({
-//                         "item_id": item_id,
-//                         "matched_count": res.matched_count
-//                     }),
-//                     StatusCode::OK,
-//                 );
-//             }
-
-//             // Fetch the updated item for "Accepted" case
-//             let pipeline = vec![
-//                 doc! { "$match": { "disaster_id": &dr_id } },
-//                 doc! { "$unwind": format!("${}", item_type) },
-//                 doc! { "$match": { format!("{}._id", item_type): &item_id } },
-//                 doc! { "$project": { "_id": 0, item_type: 1 } },
-//             ];
-
-//             let mut cursor = dg_collection.aggregate(pipeline).await.unwrap();
-//             if let Some(doc) = cursor.next().await {
-//                 if let Ok(updated_doc) = doc {
-//                     return success_response(
-//                         "Status updated successfully",
-//                         json!({
-//                             "item_id": item_id,
-//                             "matched_count": res.matched_count,
-//                             "updated_item": updated_doc.get(item_type)
-//                         }),
-//                         StatusCode::OK,
-//                     );
-//                 }
-//             }
-
-//             success_response(
-//                 "Status updated successfully, but no updated item found",
-//                 json!({
-//                     "item_id": item_id,
-//                     "matched_count": res.matched_count,
-//                     "updated_item": null
-//                 }),
-//                 StatusCode::OK,
-//             )
-//         }
-//         Err(e) => error_response(&format!("Update failed: {}", e), StatusCode::INTERNAL_SERVER_ERROR),
-//     }
-// }
+    success_response(
+        "Successfully fetched disaster guides with pending items",
+        result,
+        StatusCode::OK,
+    )
+}
